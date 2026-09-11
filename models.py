@@ -1,15 +1,14 @@
 import numpy as np
 import joblib
 
-
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import GridSearchCV
-
+# from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, learning_curve
 from xgboost import XGBClassifier
-from sklearn.linear_model import LogisticRegression
+
+
 """
     Funciones para el modelo a mano
 """
@@ -209,3 +208,17 @@ def save_model(model, encoder, path):
 def load_model(path):
     data = joblib.load(path)
     return data["model"], data["encoder"]
+
+def save_learning_curve(model, X_train, y_train, path):
+    train_sizes, train_scores, val_scores = learning_curve(
+        model, X_train, y_train, cv=3, scoring="f1_macro",
+        train_sizes=np.linspace(0.3, 1.0, 4), n_jobs=-1
+    )
+
+    data = {
+        "train_sizes": train_sizes,
+        "train_scores": train_scores,
+        "val_scores": val_scores
+    }
+
+    joblib.dump(data, path)

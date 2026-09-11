@@ -13,8 +13,10 @@ from sklearn.preprocessing import LabelEncoder # para el xgboost
 # aqui importo el resto de archivos
 from cleaning import bean, tracks
 from models import *
+from graphics import *
 
 MODEL_PATH = "modelo_xgboost.pkl"
+LEARNING_CURVE_PATH = "learning_curve.pkl"
 
 """     MODELO 1 (Algoritmo manual)
 """
@@ -50,6 +52,8 @@ alpha = 0.01
 epochs = 40
 batch_size = 16
 
+history_loss_train = []
+
 for epoch in range(epochs):
 
     # se recorre X en batches
@@ -74,8 +78,8 @@ for epoch in range(epochs):
     # calculo loss
     Z = pred_func(X_train, W, b)
     Y_hat = g(Z)
-
     loss = loss_func(Y_train, Y_hat)
+    history_loss_train.append(loss)
 
     if epoch % 10 == 0:
         print(f"Epoch {epoch}: loss = {loss}")
@@ -99,9 +103,9 @@ for i in range(15):
         # f"Probabilidades: {np.round(Y_hat_test[i], 2)}"
     )
 
-# evaluar el modelo
+# evaluar el modelo y plot
 performance(X_test, Y_test, W, b, classes)
-
+train_loss(history_loss_train)
 
 """     MODELO 2 (Algoritmo con Frameworks)
 """
@@ -133,6 +137,7 @@ else:
     save_model(model, encoder, MODEL_PATH)
     print("Modelo guardado.")
 
+y_train_encoded = encoder.transform(y_train)
 y_pred = model.predict(X_test)
 
 # accuracy = accuracy_score(y_test, y_pred)
@@ -158,18 +163,15 @@ classes = encoder.classes_
 print(classification_report(y_test_encoded, y_pred, target_names=classes))
 # print(classification_report(y_test, y_pred))
 
-plt.figure(figsize=(12, 10))
-plt.imshow(cm)
-plt.title("Matriz de Confusión")
-plt.xlabel("Predicción")
-plt.ylabel("Real")
-plt.xticks(np.arange(len(classes)), classes, rotation=90)
-plt.yticks(np.arange(len(classes)), classes)
+# plots 
+target_histogram(Y,classes)
+conf_mat(cm, classes)
+conf_mat_norm(cm, classes)
+roc_curve_plot(model, X_test, y_test, classes)
 
-for i in range(cm.shape[0]):
-    for j in range(cm.shape[1]):
-        plt.text(j, i, cm[i, j], ha="center", va="center")
+if os.path.exists(LEARNING_CURVE_PATH):
+    load_learning_curve(LEARNING_CURVE_PATH)
+else:
+    save_learning_curve(model, X_train, y_train_encoded, LEARNING_CURVE_PATH)
+    load_learning_curve(LEARNING_CURVE_PATH)
 
-plt.colorbar()
-plt.tight_layout()
-plt.show()
