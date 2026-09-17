@@ -12,7 +12,7 @@ def plot_loss(train, val):
     
     plt.figure(figsize=(8, 5))
     plt.plot(epochs_range, train, color="blue", linewidth=2, label="Train Loss")
-    plt.plot(epochs_range, val, color="blue", linewidth=2, label="Train Loss")
+    plt.plot(epochs_range, val, color="orange", linewidth=2, label="val Loss")
 
     plt.title("Evolución de la Pérdida de Entrenamiento contra Validación")
     plt.xlabel("Épocas")

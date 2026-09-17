@@ -175,6 +175,17 @@ def performance(yhat, pred_ind, real_ind, real_class):
     Ahora para el modelo con framework
 """
 
+def compute_confusion_matrix(y_true, y_pred, num_classes=None):
+    if num_classes is None:
+        num_classes = max(max(y_true), max(y_pred)) + 1
+        
+    cm = np.zeros((num_classes, num_classes), dtype=int)
+    
+    for true, pred in zip(y_true, y_pred):
+        cm[true, pred] += 1
+        
+    return cm
+
 # funcion para separar mis variables en categoricas y numericas
 def split_features(data):
     cat = []
