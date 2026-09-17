@@ -13,24 +13,29 @@ from xgboost import XGBClassifier
     Funciones para el modelo a mano
 """
 #funcion para separar el dataset en train y test
-def split(X, Y, train_size=0.8):
+def split(X, Y, train_size=0.7, val_size=0.15):
     """
-        X: matriz de features (instancias x features)
-        Y: vector de labels (instancias)
-        train_size: porcentaje de instancias que se usaran para entrenamiento
+    X: matriz de features
+    Y: matriz de labels one-hot
+    train_size: porcentaje para entrenamiento
+    val_size: porcentaje para validación
     """
-    # numero de instancias
+
     m = len(X)
-    # numero de instancias para entrenamiento
-    train_size = int(m * train_size)
 
-    # separar en train y test
-    X_train = X[:train_size]
-    Y_train = Y[:train_size]
-    X_test = X[train_size:]
-    Y_test = Y[train_size:]
+    train_end = int(m * train_size)
+    val_end = int(m * (train_size + val_size))
 
-    return X_train, Y_train, X_test, Y_test
+    X_train = X[:train_end]
+    Y_train = Y[:train_end]
+
+    X_val = X[train_end:val_end]
+    Y_val = Y[train_end:val_end]
+
+    X_test = X[val_end:]
+    Y_test = Y[val_end:]
+
+    return X_train, Y_train, X_test, Y_test, X_val, Y_val
 
 # funcion de activacion softmax
 def g(z):
@@ -104,27 +109,67 @@ def update(W, dW, b, db, alpha):
     return W, b
 
 # funcion para evaluar el desempeño del modelo
-def performance(X_test, Y_test, W, b, classes):
+def performance(yhat, pred_ind, real_ind, real_class):
     """
-        model: funcion que recibe un vector de features y devuelve un vector de probabilidades
-        se evalua el desempeño del modelo en el conjunto de test
+        Evalúa el desempeño del modelo usando
+        Cross Entropy Loss, F1 Macro, F1 por cada clase
+        yhat       : probabilidades predichas
+        pred_ind   : índices de las clases predichas
+        real_ind   : índices de las clases reales
+        real_class : clases reales
     """
-    Z_test = pred_func(X_test, W, b)
-    Y_hat_test = g(Z_test)
 
-    pred_indices = np.argmax(Y_hat_test, axis=1)
-    pred_classes = classes[pred_indices]
+    # número de clases
+    n_classes = yhat.shape[1]
 
-    real_indices = np.argmax(Y_test, axis=1)
-    real_classes = classes[real_indices]
+    # reconstruir Y en one-hot
+    y = np.zeros_like(yhat)
+    y[np.arange(len(real_ind)), real_ind] = 1
 
-    correct = 0
-    for i in range(len(X_test)):
-        if pred_classes[i] == real_classes[i]:
-            correct += 1
+    # Cross-Entropy Loss
+    loss = loss_func(y, yhat)
 
-    accuracy = correct / len(X_test)
-    print(f"Accuracy: {accuracy*100:.2f}%")
+    # matriz de confusión
+    confusion = np.zeros((n_classes, n_classes), dtype=int)
+
+    for real, pred in zip(real_ind, pred_ind):
+        confusion[real, pred] += 1
+
+    # F1 por clase
+    f1_per_class = np.zeros(n_classes)
+
+    for i in range(n_classes):
+
+        TP = confusion[i, i]
+        FP = np.sum(confusion[:, i]) - TP
+        FN = np.sum(confusion[i, :]) - TP
+
+        if TP + FP > 0:
+            precision = TP / (TP + FP)
+        else:
+            precision = 0
+
+        if TP + FN > 0:
+            recall = TP / (TP + FN)
+        else:
+            recall = 0
+
+        if precision + recall > 0:
+            f1_per_class[i] = (
+                2 * precision * recall
+                / (precision + recall)
+            )
+
+    # Macro F1
+    macro_f1 = np.mean(f1_per_class)
+
+    # resultados
+    print(f"Cross-Entropy Loss: {loss:.4f}")
+    print(f"Macro F1:           {macro_f1:.4f}")
+
+    print("\nF1 por clase:")
+    for clase, f1 in zip(np.unique(real_class), f1_per_class):
+        print(f"{clase}: {f1:.4f}")
 
 """
     Ahora para el modelo con framework
@@ -143,62 +188,53 @@ def split_features(data):
 
     return cat, num
 
-# funcion para un gridsearch que encuentra hiperparametros optimos
-def gs(num, cat):
+# funcion para crear el pipeline con hiperparametros fijados
+def build_pipeline(num, cat, estimator, depth):
     """
         num: features numericos
         cat: features categoricos
+        
+        Construye un pipeline con XGBoost usando hiperparametros fijados manualmente.
+        Los hiperparametros fueron seleccionados basandose en validacion cruzada anterior.
     """
     # para estandarizar features numericos y mantener features binarios
-    preprocessor = ColumnTransformer(transformers=[("num", StandardScaler(), num), ("bin", "passthrough", cat)])
-
-    # creo mi pipeline
-    pipeline = Pipeline([
-        ("preprocessor", preprocessor),
-        # estare usando RF
-        # ("model", RandomForestClassifier(random_state=67, class_weight="balanced", n_jobs=-1))
-        # el "balanced" es muy importante porque el target esta desbalanceado
-        ("model", XGBClassifier(random_state=67, eval_metric="mlogloss", n_jobs=-1))
-    ])
-
-    # para RF
-    # param_grid = {
-    #     "model__max_depth": [3, 5, 7, 10],
-    #     "model__n_estimators": [100, 200],
-    #     "model__max_features": ["sqrt", "log2"],
-    #     "model__min_samples_leaf": [1, 2, 4]
-    # }
-
-
-    # para XGBoost
-    param_grid = {
-    "model__n_estimators": [100, 200],
-    "model__max_depth": [3, 5, 7],
-    "model__learning_rate": [0.05, 0.1],
-    "model__subsample": [0.8, 1.0]
-}
-
-    grid_search = GridSearchCV(
-        estimator=pipeline,
-        param_grid=param_grid,
-        scoring="f1_macro",
-        cv=5, n_jobs=-1,
-        verbose = 1
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", StandardScaler(), num), 
+            ("bin", "passthrough", cat)
+        ]
     )
 
-    return grid_search
+    # creo mi pipeline con hiperparametros fijados
+    pipeline = Pipeline([
+        ("preprocessor", preprocessor),
+        ("model", XGBClassifier(
+            # los voy modificando manualmente
+            n_estimators=estimator,
+            max_depth=depth,
+            learning_rate=0.1,
+            subsample=0.8,
+            random_state=67,
+            eval_metric="mlogloss",
+            n_jobs=-1
+        ))
+    ])
 
-def run_model(grid_search, X_train, y_train):
-    model = grid_search.fit(X_train, y_train)
-    print("Mejores parametros:")
-    print(model.best_params_)
+    return pipeline
 
-    print("Mejor f1_macro:")
-    print(model.best_score_)
+def run_model(pipeline, X_train, y_train, estimator, depth):
+    """
+        Entrena el modelo usando el pipeline preconfigurado.
+    """
+    model = pipeline.fit(X_train, y_train)
+    print("Hiperparametros del modelo:")
+    print(f"  n_estimators: {estimator}")
+    print(f"  max_depth: {depth}")
+    print(f"  learning_rate: 0.1")
+    print(f"  subsample: 0.8")
+    print("Modelo entrenado exitosamente.")
 
-    best_model = model.best_estimator_
-
-    return best_model
+    return model
 
 # funcion para guardar el modelo y no correrlo en cada compilacion
 def save_model(model, encoder, path):

@@ -7,13 +7,14 @@ from sklearn.metrics import roc_curve, auc
 
 COLORS = plt.get_cmap("tab10").colors
 
-def train_loss(history_train):
-    epochs_range = range(1, len(history_train) + 1)
+def plot_loss(train, val):
+    epochs_range = range(1, len(train) + 1)
     
     plt.figure(figsize=(8, 5))
-    plt.plot(epochs_range, history_train, color="blue", linewidth=2, label="Train Loss")
-    
-    plt.title("Evolución de la Pérdida de Entrenamiento")
+    plt.plot(epochs_range, train, color="blue", linewidth=2, label="Train Loss")
+    plt.plot(epochs_range, val, color="blue", linewidth=2, label="Train Loss")
+
+    plt.title("Evolución de la Pérdida de Entrenamiento contra Validación")
     plt.xlabel("Épocas")
     plt.ylabel("Pérdida (Loss)")
     plt.grid(True, linestyle=":", alpha=0.6)
@@ -47,18 +48,26 @@ def conf_mat_norm(cm, classes, state=1):
 def target_histogram(target, classes, title="Distribucion del target"):
     target = np.asarray(target)
     classes = list(classes)
+
+    # Usar la misma posición para cada label y su barra.
+    mapping = {label: index for index, label in enumerate(classes)}
+    target = np.array([mapping[label] for label in target])
+
     bins = np.arange(len(classes) + 1) - 0.5
 
     fig, ax = plt.subplots(figsize=(11, 6))
     ax.hist(target, bins=bins, color="#2878b5", edgecolor="white", rwidth=0.86)
+
     ax.set_title(title, fontweight="bold", pad=14)
     ax.set_xlabel("Clase")
     ax.set_ylabel("Numero de observaciones")
-    ax.set_xticks(np.arange(len(classes)), classes, rotation=35, ha="right")
+    ax.set_xticks(np.arange(len(classes)))
     ax.set_xticklabels(classes, rotation=35, ha="right")
+
     ax.set_axisbelow(True)
     fig.tight_layout()
     plt.show()
+
 
 def roc_curve_plot(model, X_test, y_test, classes):
     y_score = model.predict_proba(X_test)
